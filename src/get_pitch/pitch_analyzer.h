@@ -36,6 +36,16 @@ namespace upc {
 	///
     void autocorrelation(const std::vector<float> &x, std::vector<float> &r) const;
 
+  ///
+	/// Computes cepstral analysis
+	///
+    std::vector<float> cepstral_analysis(const std::vector<float> &r) const;
+
+  ///
+	/// Estimates pitch from cepstrum
+	///
+    std::pair<float, unsigned> get_results(const std::vector<float> &cepstrum) const;
+
 	///
 	/// Returns the pitch (in Hz) of input frame x
 	///
@@ -44,7 +54,7 @@ namespace upc {
 	///
 	/// Returns true is the frame is unvoiced
 	///
-    bool unvoiced(float pot, float r1norm, float rmaxnorm) const;
+    bool unvoiced(float max) const;
 
 
   public:

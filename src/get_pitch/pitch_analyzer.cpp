@@ -3,6 +3,7 @@
 #include <iostream>
 #include <math.h>
 #include "pitch_analyzer.h"
+#include <ffft/FFTReal.h>
 
 using namespace std;
 
@@ -27,6 +28,42 @@ namespace upc {
       r[0] = 1e-10; 
   }
 
+  vector<float> PitchAnalyzer::cepstral_analysis(const vector<float> &x) const {
+
+    // Perform the fft on the input signal
+    ffft::FFTReal<float> fft(x.size());
+    vector<float> x_fft(x.size()); // Complex FFT output
+    fft.do_fft(&x_fft[0], &x[0]);
+    
+    // Compute the logarithm of the autocorrelation (cepstrum)
+    for (unsigned int i = 0; i < x.size(); ++i) {
+      float mod = sqrt(x_fft[i] * x_fft[i]);
+      x_fft[i] = log(mod + 1e-10); // Add a small value to avoid log(0)
+    }
+
+    // Perform inverse Fourier transform to obtain the cepstrum
+    vector<float> cepstrum(x.size());
+    fft.do_ifft(&x_fft[0], &cepstrum[0]);
+    fft.rescale(&cepstrum[0]);
+
+    // Return the cepstrum
+    return cepstrum;
+  }
+
+  pair<float, unsigned> PitchAnalyzer::get_results(const vector<float> &cepstrum) const {
+    // Find the peak in the cepstrum (excluding the DC component)
+    float max_val = -numeric_limits<float>::infinity();
+    unsigned int max_idx = 0;
+    for (unsigned int i = 10; i < cepstrum.size()/2; ++i) {
+      if (cepstrum[i] > max_val) {
+        max_val = cepstrum[i];
+        max_idx = i;
+      }
+    }
+
+    return make_pair(max_val, max_idx);
+  }
+
   void PitchAnalyzer::set_window(Window win_type) {
     if (frameLen == 0)
       return;
@@ -36,6 +73,10 @@ namespace upc {
     switch (win_type) {
     case HAMMING:
       /// \TODO Implement the Hamming window
+      /// \DONE Hamming window implemented
+      for (unsigned int n = 0; n < frameLen; ++n) {
+        window[n] = 0.54f - 0.46f * cos(2.0f * M_PI * n / (frameLen - 1));
+      }
       break;
     case RECT:
     default:
@@ -55,11 +96,11 @@ namespace upc {
       npitch_max = frameLen/2;
   }
 
-  bool PitchAnalyzer::unvoiced(float pot, float r1norm, float rmaxnorm) const {
+  bool PitchAnalyzer::unvoiced(float max) const {
     /// \TODO Implement a rule to decide whether the sound is voiced or not.
     /// * You can use the standard features (pot, r1norm, rmaxnorm),
     ///   or compute and use other ones.
-    if (rmaxnorm > 0.5) return false;
+    if (max > 0.3) return false;
     return true;
   }
 
@@ -71,12 +112,19 @@ namespace upc {
     for (unsigned int i=0; i<x.size(); ++i)
       x[i] *= window[i];
 
-    vector<float> r(npitch_max);
+    // Perform cepstral analysis
+    std::vector<float> cepstrum = cepstral_analysis(x);
 
-    //Compute correlation
-    autocorrelation(x, r);
+    // Estimate pitch from cepstrum
+    pair<float,unsigned> results = get_results(cepstrum);
 
-    vector<float>::const_iterator iR = r.begin(), iRMax = iR;
+    //******************** Here All the autocorrelation procedure starts
+    // vector<float> r(npitch_max);
+
+    // //Compute correlation
+    // autocorrelation(x, r);
+
+    // vector<float>::const_iterator iR = r.begin(), iRMax = iR;
 
     /// \TODO 
 	/// Find the lag of the maximum value of the autocorrelation away from the origin.<br>
@@ -85,13 +133,15 @@ namespace upc {
 	///    - The lag corresponding to the maximum value of the pitch.
     ///	   .
 	/// In either case, the lag should not exceed that of the minimum value of the pitch.
-    iRMax = r.begin() + npitch_min;
-    for (iR = r.begin() + npitch_min; iR < r.begin() + npitch_max; iR++) {
-      if (*iR > *iRMax) iRMax = iR;
-    }
-    unsigned int lag = iRMax - r.begin();
+    // iRMax = r.begin() + npitch_min;
+    // for (iR = r.begin() + npitch_min; iR < r.begin() + npitch_max; iR++) {
+    //   if (*iR > *iRMax) iRMax = iR;
+    // }
+    // unsigned int lag = iRMax - r.begin();
 
-    float pot = 10 * log10(r[0]);
+    // float pot = 10 * log10(r[0]);
+
+    //********************** Here finishes
 
     //You can print these (and other) features, look at them using wavesurfer
     //Based on that, implement a rule for unvoiced
@@ -101,9 +151,9 @@ namespace upc {
       cout << pot << '\t' << r[1]/r[0] << '\t' << r[lag]/r[0] << endl;
 #endif
     
-    if (unvoiced(pot, r[1]/r[0], r[lag]/r[0]))
+    if (unvoiced(results.first))
       return 0;
     else
-      return (float) samplingFreq/(float) lag;
+      return (float) samplingFreq/(float) results.second;
   }
 }
