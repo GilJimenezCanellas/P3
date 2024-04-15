@@ -30,29 +30,42 @@ namespace upc {
 
   vector<float> PitchAnalyzer::cepstral_analysis(const vector<float> &x) const {
 
+    vector<float> x_corrected = x;
+    
+    // Add zeros to have a length multiple of 2
+    size_t next_power_of_2 = pow(2, ceil(log2(x_corrected.size())));
+    size_t num_zeros = next_power_of_2 - x_corrected.size();
+    x_corrected.insert(x_corrected.end(), num_zeros, 0.0f);
+
     // Perform the fft on the input signal
-    ffft::FFTReal<float> fft(x.size());
-    vector<float> x_fft(x.size()); // Complex FFT output
-    fft.do_fft(&x_fft[0], &x[0]);
+    ffft::FFTReal<float> fft(x_corrected.size());
+    float x_[x_corrected.size()];
+    for (unsigned int i = 0; i < x_corrected.size(); ++i) 
+      x_[i] = x_corrected[i];
+    float x_fft[x_corrected.size()]; // Complex FFT output
+    fft.do_fft(x_fft, x_);
     
     // Compute the logarithm of the autocorrelation (cepstrum)
-    for (unsigned int i = 0; i < x.size(); ++i) {
+    for (unsigned int i = 0; i < x_corrected.size(); ++i) {
       float mod = sqrt(x_fft[i] * x_fft[i]);
       x_fft[i] = log(mod + 1e-10); // Add a small value to avoid log(0)
     }
 
     // Perform inverse Fourier transform to obtain the cepstrum
-    vector<float> cepstrum(x.size());
-    fft.do_ifft(&x_fft[0], &cepstrum[0]);
-    fft.rescale(&cepstrum[0]);
+    float cepstrum_[x_corrected.size()];
+    fft.do_ifft(x_fft, cepstrum_);
+    fft.rescale(cepstrum_);
 
-    // Return the cepstrum
+    vector<float> cepstrum;
+    for (int i = 0; i < x_corrected.size(); ++i)
+      cepstrum[i] = cepstrum_[i];
+
     return cepstrum;
   }
 
   pair<float, unsigned> PitchAnalyzer::get_results(const vector<float> &cepstrum) const {
     // Find the peak in the cepstrum (excluding the DC component)
-    float max_val = -numeric_limits<float>::infinity();
+    float max_val = -10000;
     unsigned int max_idx = 0;
     for (unsigned int i = 10; i < cepstrum.size()/2; ++i) {
       if (cepstrum[i] > max_val) {
@@ -100,7 +113,7 @@ namespace upc {
     /// \TODO Implement a rule to decide whether the sound is voiced or not.
     /// * You can use the standard features (pot, r1norm, rmaxnorm),
     ///   or compute and use other ones.
-    if (max > 0.3) return false;
+    if (max > 0.5) return false;
     return true;
   }
 
@@ -111,20 +124,20 @@ namespace upc {
     //Window input frame
     for (unsigned int i=0; i<x.size(); ++i)
       x[i] *= window[i];
-
+    
     // Perform cepstral analysis
-    std::vector<float> cepstrum = cepstral_analysis(x);
+    // std::vector<float> cepstrum = cepstral_analysis(x);
 
     // Estimate pitch from cepstrum
-    pair<float,unsigned> results = get_results(cepstrum);
+    // pair<float,unsigned> results = get_results(cepstrum);
 
     //******************** Here All the autocorrelation procedure starts
-    // vector<float> r(npitch_max);
+    vector<float> r(npitch_max);
 
-    // //Compute correlation
-    // autocorrelation(x, r);
+    //Compute correlation
+    autocorrelation(x, r);
 
-    // vector<float>::const_iterator iR = r.begin(), iRMax = iR;
+    vector<float>::const_iterator iR = r.begin(), iRMax = iR;
 
     /// \TODO 
 	/// Find the lag of the maximum value of the autocorrelation away from the origin.<br>
@@ -133,13 +146,13 @@ namespace upc {
 	///    - The lag corresponding to the maximum value of the pitch.
     ///	   .
 	/// In either case, the lag should not exceed that of the minimum value of the pitch.
-    // iRMax = r.begin() + npitch_min;
-    // for (iR = r.begin() + npitch_min; iR < r.begin() + npitch_max; iR++) {
-    //   if (*iR > *iRMax) iRMax = iR;
-    // }
-    // unsigned int lag = iRMax - r.begin();
+    iRMax = r.begin() + npitch_min;
+    for (iR = r.begin() + npitch_min; iR < r.begin() + npitch_max; iR++) {
+      if (*iR > *iRMax) iRMax = iR;
+    }
+    unsigned int lag = iRMax - r.begin();
 
-    // float pot = 10 * log10(r[0]);
+    float pot = 10 * log10(r[0]);
 
     //********************** Here finishes
 
@@ -151,9 +164,9 @@ namespace upc {
       cout << pot << '\t' << r[1]/r[0] << '\t' << r[lag]/r[0] << endl;
 #endif
     
-    if (unvoiced(results.first))
+    if (unvoiced(r[lag]/r[0]))
       return 0;
     else
-      return (float) samplingFreq/(float) results.second;
+      return (float) samplingFreq/(float) lag;
   }
 }
