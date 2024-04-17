@@ -210,6 +210,11 @@ void print_results(int nframes, int num_voiced, int num_unvoiced,
 
   score = Fss * (1 - fine_error);
 
+  // if (filename == "TOTAL") {
+  //   // cout << fixed << setprecision(2);
+  //   cout << "\n===>\t" << filename << ":\t" << 100 * score << " %\n";
+  // }
+
   cout << fixed << setprecision(2);
   cout << "\n===>\t" << filename << ":\t" << 100 * score << " %\n";
 }

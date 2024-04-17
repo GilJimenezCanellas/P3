@@ -7,12 +7,19 @@ set -o pipefail
 # Put here the program (maybe with path)
 GETF0="get_pitch"
 
-for fwav in pitch_db/train/*.wav; do
-    ff0=${fwav/.wav/.f0}
-    echo "$GETF0 $fwav $ff0 ----"
-	$GETF0 $fwav $ff0 > /dev/null || ( echo -e "\nError in $GETF0 $fwav $ff0" && exit 1 )
-done
+# Array of threshold values
+thresholds=(45 43 50 52 55)
 
-pitch_evaluate pitch_db/train/*.f0ref
+# Iterate over each threshold value
+for threshold in "${thresholds[@]}"; do
+    echo "Running get_pitch with threshold: $threshold"
+    for fwav in pitch_db/train/*.wav; do
+        ff0=${fwav/.wav/.f0}
+        # echo "$GETF0 -t $threshold $fwav $ff0 ----"
+        $GETF0 -t $threshold $fwav $ff0 > /dev/null || ( echo -e "\nError in $GETF0 -t $threshold $fwav $ff0" && exit 1 )
+    done
+
+    pitch_evaluate pitch_db/train/*.f0ref
+done
 
 exit 0

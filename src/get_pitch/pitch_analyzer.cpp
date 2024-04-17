@@ -28,10 +28,29 @@ namespace upc {
       r[0] = 1e-10; 
   }
 
+  void PitchAnalyzer::mdf(const vector<float> &x, vector<float> &r) const {
+
+    for (unsigned int l = 0; l < r.size(); ++l) {
+  		/// \TODO Compute the autocorrelation r[l]
+      /// \DONE MDF computed
+      /// \f[
+      ///   r[l] = \frac{1}{N} \sum_n x[n]-[n+l]7
+      /// \f]
+      r[l] = 0.0f;
+      for (unsigned int n = 0; n < x.size()-l; ++n) {
+        r[l] += abs(x[n] - x[n+l]);
+      }
+      r[l] /= x.size();
+    }
+
+    if (r[0] == 0.0F) //to avoid log() and divide zero 
+      r[0] = 1e-10; 
+  }
+
   vector<float> PitchAnalyzer::cepstral_analysis(const vector<float> &x) const {
 
     vector<float> x_corrected = x;
-    
+
     // Add zeros to have a length multiple of 2
     size_t next_power_of_2 = pow(2, ceil(log2(x_corrected.size())));
     size_t num_zeros = next_power_of_2 - x_corrected.size();
@@ -57,24 +76,31 @@ namespace upc {
     fft.rescale(cepstrum_);
 
     vector<float> cepstrum;
+    cepstrum.resize(x_corrected.size());
     for (int i = 0; i < x_corrected.size(); ++i)
       cepstrum[i] = cepstrum_[i];
 
     return cepstrum;
   }
 
-  pair<float, unsigned> PitchAnalyzer::get_results(const vector<float> &cepstrum) const {
+  tuple<float, unsigned, float> PitchAnalyzer::get_results(const vector<float> &cepstrum) const {
     // Find the peak in the cepstrum (excluding the DC component)
     float max_val = -10000;
     unsigned int max_idx = 0;
-    for (unsigned int i = 10; i < cepstrum.size()/2; ++i) {
+    float max_val_zero = 0;
+    for (unsigned int i= 0; i < 10; ++i) {
+      if (cepstrum[i] > max_val_zero) {
+        max_val_zero = cepstrum[i];
+      }
+    }
+    for (unsigned int i = 40; i < 400; ++i) {
       if (cepstrum[i] > max_val) {
         max_val = cepstrum[i];
         max_idx = i;
       }
     }
 
-    return make_pair(max_val, max_idx);
+    return make_tuple(max_val, max_idx, max_val_zero);
   }
 
   void PitchAnalyzer::set_window(Window win_type) {
@@ -109,11 +135,11 @@ namespace upc {
       npitch_max = frameLen/2;
   }
 
-  bool PitchAnalyzer::unvoiced(float max) const {
+  bool PitchAnalyzer::unvoiced(float max, float max_cep, int zcr, float min_dif) const {
     /// \TODO Implement a rule to decide whether the sound is voiced or not.
     /// * You can use the standard features (pot, r1norm, rmaxnorm),
     ///   or compute and use other ones.
-    if (max > 0.5) return false;
+    if (max > 0.6 || zcr < 50 || max_cep > 0.3) return false;
     return true;
   }
 
@@ -126,18 +152,26 @@ namespace upc {
       x[i] *= window[i];
     
     // Perform cepstral analysis
-    // std::vector<float> cepstrum = cepstral_analysis(x);
+    std::vector<float> cepstrum = cepstral_analysis(x);
 
     // Estimate pitch from cepstrum
-    // pair<float,unsigned> results = get_results(cepstrum);
+    tuple<float, unsigned, float> results = get_results(cepstrum);
 
     //******************** Here All the autocorrelation procedure starts
     vector<float> r(npitch_max);
+    vector<float> d(npitch_max);
 
     //Compute correlation
     autocorrelation(x, r);
+    mdf(x, d);
+
+    int zcr = 0;
+    for (int i = 1; i < x.size(); i++) {
+        zcr += (x[i] * x[i-1] < 0);
+    }
 
     vector<float>::const_iterator iR = r.begin(), iRMax = iR;
+    vector<float>::const_iterator iD = d.begin(), iDMin = iD;
 
     /// \TODO 
 	/// Find the lag of the maximum value of the autocorrelation away from the origin.<br>
@@ -154,6 +188,12 @@ namespace upc {
 
     float pot = 10 * log10(r[0]);
 
+    iDMin = d.begin() + npitch_min;
+    for (iD = d.begin() + npitch_min; iD < d.begin() + npitch_max; iD++) {
+      if (*iD < *iDMin) iDMin = iD;
+    }
+    unsigned int lag_d = iDMin - d.begin();
+
     //********************** Here finishes
 
     //You can print these (and other) features, look at them using wavesurfer
@@ -164,7 +204,7 @@ namespace upc {
       cout << pot << '\t' << r[1]/r[0] << '\t' << r[lag]/r[0] << endl;
 #endif
     
-    if (unvoiced(r[lag]/r[0]))
+    if (unvoiced(r[lag]/r[0], get<0>(results), zcr, d[lag_d]))
       return 0;
     else
       return (float) samplingFreq/(float) lag;

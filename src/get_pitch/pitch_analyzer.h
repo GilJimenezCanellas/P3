@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <algorithm>
+#include <tuple>
 
 namespace upc {
   const float MIN_F0 = 20.0F;    ///< Minimum value of pitch in Hertzs
@@ -30,11 +31,17 @@ namespace upc {
       samplingFreq, ///< sampling rate (in samples per second). Has to be set in the constructor call
       npitch_min, ///< minimum value of pitch period, in samples
       npitch_max; ///< maximum value of pitch period, in samples
+    float threshold;
  
 	///
 	/// Computes correlation from lag=0 to r.size()
 	///
     void autocorrelation(const std::vector<float> &x, std::vector<float> &r) const;
+	
+  ///
+	/// Computes mdf from lag=0 to r.size()
+	///
+    void mdf(const std::vector<float> &x, std::vector<float> &r) const;
 
   ///
 	/// Computes cepstral analysis
@@ -44,7 +51,7 @@ namespace upc {
   ///
 	/// Estimates pitch from cepstrum
 	///
-    std::pair<float, unsigned> get_results(const std::vector<float> &cepstrum) const;
+    std::tuple<float, unsigned, float> get_results(const std::vector<float> &cepstrum) const;
 
 	///
 	/// Returns the pitch (in Hz) of input frame x
@@ -54,7 +61,7 @@ namespace upc {
 	///
 	/// Returns true is the frame is unvoiced
 	///
-    bool unvoiced(float max) const;
+    bool unvoiced(float max, float max_zero, int zcr, float min_dif) const;
 
 
   public:
@@ -62,13 +69,15 @@ namespace upc {
 					unsigned int sFreq,			///< Sampling rate in Hertzs
 					Window w=PitchAnalyzer::HAMMING,	///< Window type
 					float min_F0 = MIN_F0,		///< Pitch range should be restricted to be above this value
-					float max_F0 = MAX_F0		///< Pitch range should be restricted to be below this value
+					float max_F0 = MAX_F0,		///< Pitch range should be restricted to be below this value
+          float th = 0.5
 				 )
 	{
       frameLen = fLen;
       samplingFreq = sFreq;
       set_f0_range(min_F0, max_F0);
       set_window(w);
+      threshold = th;
     }
 
 	///
