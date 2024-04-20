@@ -28,7 +28,8 @@ Usage:
 Options:
     -h, --help  Show this screen
     --version   Show the version of the project
-    -t, --threshold=<threshold>   Set threshold for pitch estimation [default: 0.5]
+    -t, --threshold1=<threshold1>   Set threshold for pitch estimation [default: 0.5]
+    -r, --threshold2=<threshold2>   Set threshold for pitch estimation [default: 0.9]
 
 Arguments:
     input-wav   Wave file with the audio signal
@@ -50,7 +51,8 @@ int main(int argc, const char *argv[]) {
 
 	std::string input_wav = args["<input-wav>"].asString();
 	std::string output_txt = args["<output-txt>"].asString();
-  double threshold = std::stod(args["--threshold"].asString());
+  double threshold1 = std::stod(args["--threshold1"].asString());
+  double threshold2 = std::stod(args["--threshold2"].asString());
 
   // Read input sound file
   unsigned int rate;
@@ -64,7 +66,7 @@ int main(int argc, const char *argv[]) {
   int n_shift = rate * FRAME_SHIFT;
 
   // Define analyzer
-  PitchAnalyzer analyzer(n_len, rate, PitchAnalyzer::HAMMING, 50, 500, threshold);
+  PitchAnalyzer analyzer(n_len, rate, PitchAnalyzer::HAMMING, 50, 500, threshold1, threshold2);
 
   /// \TODO
   /// Preprocess the input signal in order to ease pitch estimation. For instance,
@@ -81,13 +83,13 @@ int main(int argc, const char *argv[]) {
         return abs(a) < abs(b);
     });
     // Calculate the clip_threshold as half of the maximum absolute value
-    float clip_threshold = 0 * abs(max_sample);
-      
+    float clip_threshold = 0.06 * abs(max_sample);
+
     // Apply central clipping
     for (int i = 0; i < n_len; ++i) {
       // Clip samples symmetrically around the center
       float sample = *(iX + i);
-      if (sample < clip_threshold && sample > -clip_threshold){
+      if (abs(sample) < clip_threshold){
           *(iX + i) = 0;
       }
     }
@@ -104,7 +106,7 @@ int main(int argc, const char *argv[]) {
 
   // Apply median filter to the pitch estimation
   vector<float> filtered_f0;
-  int filter_window_size = 3; // Adjust this window size as needed
+  int filter_window_size = 5; // Adjust this window size as needed
 
   for (int i = 0; i < f0.size(); ++i) {
       // Determine the range of indices for the current window
@@ -119,6 +121,12 @@ int main(int argc, const char *argv[]) {
       
       // Get the median value
       float median_pitch = window_pitch[window_pitch.size() / 2];
+
+      // This condition improves the pitch estimation, reduces the MSE fine errors,
+      // but reduces the overall result
+      // if (median_pitch - f0[i] < threshold1) {
+      //   median_pitch = f0[i];
+      // }
       
       // Store the median value in the filtered_f0 vector
       filtered_f0.push_back(median_pitch);

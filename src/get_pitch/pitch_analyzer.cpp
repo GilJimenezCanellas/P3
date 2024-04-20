@@ -135,11 +135,20 @@ namespace upc {
       npitch_max = frameLen/2;
   }
 
-  bool PitchAnalyzer::unvoiced(float max, float max_cep, int zcr, float min_dif) const {
+  bool PitchAnalyzer::unvoiced(int zcr, float r1norm, float rmaxnorm, float pot) const {
     /// \TODO Implement a rule to decide whether the sound is voiced or not.
     /// * You can use the standard features (pot, r1norm, rmaxnorm),
     ///   or compute and use other ones.
-    if (max > 0.6 || zcr < 50 || max_cep > 0.3) return false;
+    // if (rmaxnorm > 0.34 && r1norm > 0.9 && zcr < 150) return false;
+    // int count = 0;
+
+    // if (rmaxnorm > 0.35) count++;
+    // if (r1norm > 0.87) count++;
+    // if (pot > threshold1) count++;
+
+    // if (count >= 2) return false;
+
+    if (rmaxnorm > 0.35 && r1norm > 0.87) return false;
     return true;
   }
 
@@ -152,10 +161,10 @@ namespace upc {
       x[i] *= window[i];
     
     // Perform cepstral analysis
-    std::vector<float> cepstrum = cepstral_analysis(x);
+    // std::vector<float> cepstrum = cepstral_analysis(x);
 
     // Estimate pitch from cepstrum
-    tuple<float, unsigned, float> results = get_results(cepstrum);
+    // tuple<float, unsigned, float> results = get_results(cepstrum);
 
     //******************** Here All the autocorrelation procedure starts
     vector<float> r(npitch_max);
@@ -163,15 +172,15 @@ namespace upc {
 
     //Compute correlation
     autocorrelation(x, r);
-    mdf(x, d);
+    // mdf(x, d);
 
     int zcr = 0;
-    for (int i = 1; i < x.size(); i++) {
-        zcr += (x[i] * x[i-1] < 0);
-    }
+    // for (int i = 1; i < x.size(); i++) {
+    //     zcr += (x[i] * x[i-1] < 0);
+    // }
 
     vector<float>::const_iterator iR = r.begin(), iRMax = iR;
-    vector<float>::const_iterator iD = d.begin(), iDMin = iD;
+    // vector<float>::const_iterator iD = d.begin(), iDMin = iD;
 
     /// \TODO 
 	/// Find the lag of the maximum value of the autocorrelation away from the origin.<br>
@@ -188,11 +197,11 @@ namespace upc {
 
     float pot = 10 * log10(r[0]);
 
-    iDMin = d.begin() + npitch_min;
-    for (iD = d.begin() + npitch_min; iD < d.begin() + npitch_max; iD++) {
-      if (*iD < *iDMin) iDMin = iD;
-    }
-    unsigned int lag_d = iDMin - d.begin();
+    // iDMin = d.begin() + npitch_min;
+    // for (iD = d.begin() + npitch_min; iD < d.begin() + npitch_max; iD++) {
+    //   if (*iD < *iDMin) iDMin = iD;
+    // }
+    // unsigned int lag_d = iDMin - d.begin();
 
     //********************** Here finishes
 
@@ -204,7 +213,7 @@ namespace upc {
       cout << pot << '\t' << r[1]/r[0] << '\t' << r[lag]/r[0] << endl;
 #endif
     
-    if (unvoiced(r[lag]/r[0], get<0>(results), zcr, d[lag_d]))
+    if (unvoiced(zcr, r[1]/r[0], r[lag]/r[0], pot))
       return 0;
     else
       return (float) samplingFreq/(float) lag;

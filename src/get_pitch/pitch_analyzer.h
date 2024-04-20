@@ -31,7 +31,7 @@ namespace upc {
       samplingFreq, ///< sampling rate (in samples per second). Has to be set in the constructor call
       npitch_min, ///< minimum value of pitch period, in samples
       npitch_max; ///< maximum value of pitch period, in samples
-    float threshold;
+    float threshold1, threshold2;
  
 	///
 	/// Computes correlation from lag=0 to r.size()
@@ -61,7 +61,7 @@ namespace upc {
 	///
 	/// Returns true is the frame is unvoiced
 	///
-    bool unvoiced(float max, float max_zero, int zcr, float min_dif) const;
+    bool unvoiced(int zcr, float r1norm, float rmaxnorm, float pot) const;
 
 
   public:
@@ -70,14 +70,16 @@ namespace upc {
 					Window w=PitchAnalyzer::HAMMING,	///< Window type
 					float min_F0 = MIN_F0,		///< Pitch range should be restricted to be above this value
 					float max_F0 = MAX_F0,		///< Pitch range should be restricted to be below this value
-          float th = 0.5
+          float th1 = 0.5,
+          float th2 = 0.9
 				 )
 	{
       frameLen = fLen;
       samplingFreq = sFreq;
       set_f0_range(min_F0, max_F0);
       set_window(w);
-      threshold = th;
+      threshold1 = th1;
+      threshold2 = th2;
     }
 
 	///
