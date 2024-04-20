@@ -35,7 +35,7 @@ Ejercicios básicos
      unos 30 ms de un fonema sonoro y su periodo de pitch; y, en otro *subplot*, se vea con claridad la
 	 autocorrelación de la señal y la posición del primer máximo secundario.
 
-  ![Autocorrelation](autocorr.png)
+  ![Autocorrelation](doc/autocorr.png)
 
 	 NOTA: es más que probable que tenga que usar Python, Octave/MATLAB u otro programa semejante para
 	 hacerlo. Se valorará la utilización de la biblioteca matplotlib de Python.
@@ -157,6 +157,31 @@ En esta grafica podemos ver como prácticamente no hay diferencia entre la autoc
   > **Centre clipping:**
   > Hemos implementado centre clipping sin offset, ya que nos ha mejorado los resultados.
 
+```cpp
+  vector<float>::iterator iX;
+  vector<float> f0;
+  for (iX = x.begin(); iX + n_len < x.end(); iX = iX + n_shift) {
+    // Calculate the maximum absolute value within the current frame
+    float max_sample = *max_element(iX, iX + n_len, [](float a, float b) {
+        return abs(a) < abs(b);
+    });
+    // Calculate the clip_threshold as half of the maximum absolute value
+    float clip_threshold = 0.06 * abs(max_sample);
+
+    // Apply central clipping
+    for (int i = 0; i < n_len; ++i) {
+      // Clip samples symmetrically around the center
+      float sample = *(iX + i);
+      if (abs(sample) < clip_threshold){
+          *(iX + i) = 0;
+      }
+    }
+    
+    float f = analyzer(iX, iX + n_len);
+    f0.push_back(f);
+  }
+```
+
 En la siguiente imagen podemos ver como el valor del centre clipping afecta al resultado total.
 
 ![alt text](doc/centre_clip.png)
@@ -166,7 +191,36 @@ Finalmente hemos encontrado que el valor *0.06* es el que nos da mejores resulta
   > **Filtro de mediana:**
   > Tambien hemos implementado un filtro de mediana para el postprocessado.
 
-En esta captura de pantalla vemos como afectan las diferentes longitudes a el resultado final.
+```cpp
+  vector<float> filtered_f0;
+  int filter_window_size = 5; // Adjust this window size as needed
+
+  for (int i = 0; i < f0.size(); ++i) {
+      // Determine the range of indices for the current window
+      int start_index = max(0, i - filter_window_size / 2);
+      int end_index = min(static_cast<int>(f0.size()) - 1, i + filter_window_size / 2);
+      
+      // Create a copy of the pitch values within the window
+      vector<float> window_pitch(f0.begin() + start_index, f0.begin() + end_index + 1);
+      
+      // Sort the window_pitch vector to find the median
+      std::nth_element(window_pitch.begin(), window_pitch.begin() + window_pitch.size() / 2, window_pitch.end());
+      
+      // Get the median value
+      float median_pitch = window_pitch[window_pitch.size() / 2];
+
+      // This condition improves the pitch estimation, reduces the MSE fine errors,
+      // but reduces the overall result
+      // if (median_pitch - f0[i] < threshold1) {
+      //   median_pitch = f0[i];
+      // }
+      
+      // Store the median value in the filtered_f0 vector
+      filtered_f0.push_back(median_pitch);
+  }
+```
+
+En esta captura de pantalla vemos como afectan las diferentes longitudes a el resultado final. Tambien hemos implementado que si la diferencia entre el f0 filtrado y el f0 original es mas grande que un threshold, escoja el f0 original. Pero tampoco mejorava el resultado final.
 
 ![alt text](doc/median.png)
 
@@ -175,13 +229,13 @@ Finalmente concluimos que *5* es el valor idoneo.
   > **Cepstrum:**
   > Hemos echo un analisis en profundidad del algoritmo del cepstrum.
 
-Primero, en los ficheros `vis_voiced.ipynb` y `vis_unvoiced.ipynb` de la carpeta creada para visualizacion de graficas `vis`, hemos podido analizar, paso a paso, como encontrar los coefficientes cepstrales. En esta primera grafica podemos ver una comparativa de los coeficientes cepstrales de una trama sorda, y una sonora.
+Primero, en los ficheros `vis_voiced.ipynb` y `vis_unvoiced.ipynb` de la carpeta creada para visualizacion de graficas `vis`, hemos podido analizar, paso a paso, como encontrar los coefficientes cepstrales. En esta primera grafica podemos ver una comparativa de los coeficientes cepstrales de una trama sorda, y una sonora. Ademas, en el fichero `cepstrum.ipynb`, tambien en `vis`, se puede analizar todo el proceso, de manera mas efectiva, y desplazando la trama de interés para todas las posiciones.
 
 ![alt text](doc/cep.png)
 
-En esta grafica podemos ver claramente la diferenciacion entre sordo y sonoro. 
+Podemos ver claramente la diferenciacion entre sordo y sonoro. 
 
-Viendo estos resultados creímos conveniente programar este algoritmo. A continuación podemos ver la dos funciones principales para el algoritmo.
+Viendo estos resultados creímos conveniente programar este algoritmo. A continuación podemos ver sus funciones principales.
 
 ```cpp
   vector<float> PitchAnalyzer::cepstral_analysis(const vector<float> &x) const {
@@ -220,7 +274,8 @@ Viendo estos resultados creímos conveniente programar este algoritmo. A continu
     return cepstrum;
   }
 ```
-En `cepstral_analysis` funcion calculamos los coeficientes del cepstrum a partir de la libreria fft que se nos proporciona.
+
+En `cepstral_analysis` calculamos los coeficientes del cepstrum a partir de la libreria fft que se nos proporciona.
 
 ```cpp
   tuple<float, unsigned, float> PitchAnalyzer::get_results(const vector<float> &cepstrum) const {
@@ -243,7 +298,9 @@ En `cepstral_analysis` funcion calculamos los coeficientes del cepstrum a partir
     return make_tuple(max_val, max_idx, max_val_zero);
   }
 ```
+
 En `get_results` analizamos el vector de coeficientes cepstrales y devolvemos el vamor maximo de los 10 primeros coeficientes (creíamos que era inportante, pero no lo acabamos utilizando), el valor maximo dentro del rango de pitch, y su respectivo indice. Solo utilizamos el indice, ya que es la estimacion del pitch.
+
 
 ```cpp
   if (unvoiced(zcr, r[1]/r[0], r[lag]/r[0], pot))
