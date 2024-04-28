@@ -28,8 +28,11 @@ Usage:
 Options:
     -h, --help  Show this screen
     --version   Show the version of the project
-    -t, --threshold1=<threshold1>   Set threshold for pitch estimation [default: 0.5]
-    -r, --threshold2=<threshold2>   Set threshold for pitch estimation [default: 0.9]
+    -t, --th_rlag=<th_rlag>   Set threshold for pitch estimation [default: 0.5]
+    -r, --th_r1=<th_r1>   Set threshold for pitch estimation [default: 0.9]
+    -z, --th_z=<th_z>   Threshold for zcr estimation [default: 30]
+    -m, --th_m=<th_m>   Threshold for median filter [default: 3]
+    -c, --th_c=<th_c>   Threshold for centre clipping [default: 0.0045]
 
 Arguments:
     input-wav   Wave file with the audio signal
@@ -51,8 +54,13 @@ int main(int argc, const char *argv[]) {
 
 	std::string input_wav = args["<input-wav>"].asString();
 	std::string output_txt = args["<output-txt>"].asString();
-  double threshold1 = std::stod(args["--threshold1"].asString());
-  double threshold2 = std::stod(args["--threshold2"].asString());
+  double th_rlag = std::stod(args["--th_rlag"].asString());
+  double th_r1 = std::stod(args["--th_r1"].asString());
+  double th_z = std::stod(args["--th_z"].asString());
+  double th_m = std::stod(args["--th_m"].asString());
+  double th_c = std::stod(args["--th_c"].asString());
+
+  printf("TH_RLAG: %f\n", th_rlag);
 
   // Read input sound file
   unsigned int rate;
@@ -66,7 +74,7 @@ int main(int argc, const char *argv[]) {
   int n_shift = rate * FRAME_SHIFT;
 
   // Define analyzer
-  PitchAnalyzer analyzer(n_len, rate, PitchAnalyzer::HAMMING, 50, 500, threshold1, threshold2);
+  PitchAnalyzer analyzer(n_len, rate, PitchAnalyzer::RECT, 50, 500, th_rlag, th_r1, th_z);
 
   /// \TODO
   /// Preprocess the input signal in order to ease pitch estimation. For instance,
@@ -77,36 +85,50 @@ int main(int argc, const char *argv[]) {
   // Iterate for each frame and save values in f0 vector
   vector<float>::iterator iX;
   vector<float> f0;
-  for (iX = x.begin(); iX + n_len < x.end(); iX = iX + n_shift) {
-    // Calculate the maximum absolute value within the current frame
-    float max_sample = *max_element(iX, iX + n_len, [](float a, float b) {
-        return abs(a) < abs(b);
-    });
-    // Calculate the clip_threshold as half of the maximum absolute value
-    float clip_threshold = 0.06 * abs(max_sample);
 
-    // Apply central clipping
-    for (int i = 0; i < n_len; ++i) {
-      // Clip samples symmetrically around the center
-      float sample = *(iX + i);
-      if (abs(sample) < clip_threshold){
-          *(iX + i) = 0;
-      }
+  float alpha = 0.0047;
+  for (iX = x.begin(); iX  < x.end(); iX++ ) {
+    if (*iX < alpha && *iX > -alpha){ 
+      *iX = 0;
     }
-    
+  }
+
+  for (iX = x.begin(); iX + n_len < x.end(); iX = iX + n_shift) {
     float f = analyzer(iX, iX + n_len);
     f0.push_back(f);
   }
 
+//******************
+  // for (iX = x.begin(); iX + n_len < x.end(); iX = iX + n_shift) {
+  //   // Calculate the maximum absolute value within the current frame
+  //   float max_sample = *max_element(iX, iX + n_len, [](float a, float b) {
+  //       return abs(a) < abs(b);
+  //   });
+  //   // Calculate the clip_threshold as half of the maximum absolute value
+  //   float clip_threshold = 0.06 * abs(max_sample);
+
+  //   // Apply central clipping
+  //   for (int i = 0; i < n_len; ++i) {
+  //     // Clip samples symmetrically around the center
+  //     float sample = *(iX + i);
+  //     if (abs(sample) < clip_threshold){
+  //         *(iX + i) = 0;
+  //     }
+  //   }
+    
+  //   float f = analyzer(iX, iX + n_len);
+  //   f0.push_back(f);
+  // }
+ // ****************
   /// \TODO
   /// Postprocess the estimation in order to supress errors. For instance, a median filter
   /// or time-warping may be used.
 
   /// \DONE median filter is done
-
+//************
   // Apply median filter to the pitch estimation
   vector<float> filtered_f0;
-  int filter_window_size = 5; // Adjust this window size as needed
+  int filter_window_size = 3;
 
   for (int i = 0; i < f0.size(); ++i) {
       // Determine the range of indices for the current window
@@ -131,6 +153,21 @@ int main(int argc, const char *argv[]) {
       // Store the median value in the filtered_f0 vector
       filtered_f0.push_back(median_pitch);
   }
+//***********************
+
+  // float aux = 0;
+  // int k_wind = 1; ///window size
+  // for(int i = 0; i < (int)f0.size(); i++){
+  //   for(int j = 0; j < k_wind; ++j){
+  //     if(i <= ((int)f0.size()-k_wind)){
+  //       aux += f0[i + j]; 
+  //     }else{
+  //       aux = f0[i];
+  //     }
+  //   }
+  //   f0[i] = aux/k_wind;
+  //   aux=0;
+  // }
 
   // Write f0 contour into the output file
   ofstream os(output_txt);

@@ -2,6 +2,7 @@
 
 scripts = [
     'run_get_pitch.sh',
+    'optimization.sh',
 ]
 
 foreach script: scripts

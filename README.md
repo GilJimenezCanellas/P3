@@ -66,10 +66,10 @@ En los siguientes apartados se detalla el uso de estos parámetros.
     /// \TODO Implement a rule to decide whether the sound is voiced or not.
     /// * You can use the standard features (pot, r1norm, rmaxnorm),
     ///   or compute and use other ones.
-    /// \DONE Rule implemented
+    /// \DONE Rule optimized to decide if it is voiced or not
 
-    if (rmaxnorm > 0.35 && r1norm > 0.87) return false;
-    return true;
+    if ((pot < -33 || r1norm < 0.96) && rmaxnorm < 0.41) return true;
+    else return false;
   }
 ```
 
@@ -106,7 +106,7 @@ En los siguientes apartados se detalla el uso de estos parámetros.
     y el *score* TOTAL proporcionados por `pitch_evaluate` en la evaluación de la base de datos 
 	`pitch_db/train`..
 
-![alt text](doc/results.png)
+![alt text](doc/result.png)
 
 Ejercicios de ampliación
 ------------------------
@@ -223,8 +223,6 @@ Finalmente hemos encontrado que el valor *0.06* es el que nos da mejores resulta
 En esta captura de pantalla vemos como afectan las diferentes longitudes a el resultado final. Tambien hemos implementado que si la diferencia entre el f0 filtrado y el f0 original es mas grande que un threshold, escoja el f0 original. Pero tampoco mejorava el resultado final.
 
 ![alt text](doc/median.png)
-
-Finalmente concluimos que *5* es el valor idoneo.
 
   > **Cepstrum:**
   > Hemos echo un analisis en profundidad del algoritmo del cepstrum.
@@ -355,56 +353,49 @@ Es posible que estos resultados sean por algun error en la implementación de el
 Ademas en el fichero `vis_autocorr.ipynb` hemos analizado autocorrelación y amdf, y deberian dar resultados muy parecidos.
 
   > **Optimización de los resultados:**
-  > Utilizando docopt se han optimizado las diferentes constantes y umbrales. 
-
-Principalmente se ha modificado el fichero `run_get_pitch.sh`, para iterar sobre dos thresholds.
+  > Utilizando docopt y un script, `optimization.sh`, se han optimizado las diferentes constantes y umbrales. 
 
 ```bash
-  #!/bin/bash
+GETF0="get_pitch"
 
-  # Establecemos que el código de retorno de un pipeline sea el del último programa con código de retorno
-  # distinto de cero, o cero si todos devuelven cero.
-  set -o pipefail
+# Array of threshold values
+th_rlags=(0.39 0.4 0.41)
+th_r1s=(0.94 0.96 0.98)
+th_zs=(32 33 34 35)
+th_ms=(1 3)
+th_cs=(0.0043 0.0045 0.0047 0.0049)
 
-  # Put here the program (maybe with path)
-  GETF0="get_pitch"
+# Iterate over each combination of thresholds
+for th_r1s in "${th_r1s[@]}"; do
+    for th_rlags in "${th_rlags[@]}"; do
+        for th_zs in "${th_zs[@]}"; do
+            for th_ms in "${th_ms[@]}"; do
+                for th_cs in "${th_cs[@]}"; do 
+                    echo "Running get_pitch with thresholds: $th_r1s, $th_rlags, $th_zs, $th_ms and $th_cs"
+                    
+                    for fwav in pitch_db/train/*.wav; do
+                        ff0=${fwav/.wav/.f0}
+                        # echo "$GETF0 -t $threshold1 $fwav $ff0 ----"
+                        $GETF0 -t $th_rlags -r $th_r1s -z $th_zs -m $th_ms -c $th_cs $fwav $ff0 > /dev/null || ( echo -e "\nError in $GETF0 -t $th_r1s -t $th_rlags -z $th_zs -m $th_ms -c $th_cs $fwav $ff0" && exit 1 )
+                    done
+                    pitch_evaluate pitch_db/train/*.f0ref
+                done
+            done
+        done
+    done
+done
 
-  # Array of threshold values
-  thresholds1=(0 0.2 0.4)
-  thresholds2=(0.8 0.9 1 1.1)
-
-  # Iterate over each combination of thresholds
-  for threshold1 in "${thresholds1[@]}"; do
-      for threshold2 in "${thresholds2[@]}"; do
-          echo "Running get_pitch with thresholds: $threshold1 and $threshold2"
-          for fwav in pitch_db/train/*.wav; do
-              ff0=${fwav/.wav/.f0}
-              # echo "$GETF0 -t $threshold1 $fwav $ff0 ----"
-              $GETF0 -t $threshold1 -r $threshold2 $fwav $ff0 > /dev/null || ( echo -e "\nError in $GETF0 -t $threshold1 -r $threshold2 $fwav $ff0" && exit 1 )
-          done
-          pitch_evaluate pitch_db/train/*.f0ref
-      done
-  done
-
-  exit 0
-  0
+exit 0
+0
 ```
 
 Una vez encontrado, mas o menos, los valores de los parametros óptimos, procedemos ha hacer una optimización mas precisa. Este es el codigo de la función `unvoiced`.
 
 ```cpp
-  if (rmaxnorm > threshold1 && r1norm > threshold2) return false;
-  return true;
+  if ((pot < -th_z || r1norm < th_r1) && rmaxnorm < th_rlag) return true;
+    else return false;
+
 ```
-
-```bash
-  thresholds1=(0.33 0.34 0.35 0.36 0.37)
-  thresholds2=(0.85 0.86 0.87 0.88 0.89)
-```
-
-Los resultados son los siguientes.
-
-![alt text](doc/opt.png)
 
 Aquí podemos ver los parametros mas óptimos.
 
@@ -423,7 +414,7 @@ Aunque finalmente, para el resultado final tampoco lo hemos tenido en cuenta, ya
  > **Analisis final:**
  > Finalmente, el mejor resultado nos ha salido con el metodo de la autocorrelación.
 
-Tenemos en cuenta la r[lag]/r[0] y r[1]/r[0] con valores *0.35* y *0.87* respectivamente.
+Tenemos en cuenta potencia, r[lag]/r[0] y r[1]/r[0] con valores *33*, *0.41* y *0.96* respectivamente.
 
 Evaluación *ciega* del estimador
 -------------------------------

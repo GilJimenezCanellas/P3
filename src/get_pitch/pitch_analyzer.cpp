@@ -148,8 +148,11 @@ namespace upc {
 
     // if (count >= 2) return false;
 
-    if (rmaxnorm > 0.35 && r1norm > 0.87) return false;
-    return true;
+    if ((pot < -33 || r1norm < 0.96) && rmaxnorm < 0.41) return true;
+    else return false;
+
+    // if (rmaxnorm > th_rlag && r1norm > th_r1) return false;
+    // return true;
   }
 
   float PitchAnalyzer::compute_pitch(vector<float> & x) const {
