@@ -186,8 +186,6 @@ En la siguiente imagen podemos ver como el valor del centre clipping afecta al r
 
 ![alt text](doc/centre_clip.png)
 
-Finalmente hemos encontrado que el valor *0.06* es el que nos da mejores resultados.
-
   > **Filtro de mediana:**
   > Tambien hemos implementado un filtro de mediana para el postprocessado.
 
